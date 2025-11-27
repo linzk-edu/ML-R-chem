@@ -1,0 +1,78 @@
+# 加载必要的包
+library(MASS)       # 用于LDA模型
+library(readxl)     # 读取Excel文件
+library(caret)      # 用于交叉验证
+library(ggplot2)    # 可视化
+library(dplyr)      # 数据处理
+library(ggord)      # 用于LDA可视化
+library(gridExtra)  # 图形排列
+
+# 读取数据
+data <- readxl::read_excel("C:/Users/ZhuanZ/Desktop/1.xlsx")
+
+# 数据预处理
+data$conc <- as.factor(data$conc)  # 将conc列转换为因子类型（分类变量）
+
+# 为每行添加唯一标识符（用于后续匹配）
+data$row_id <- 1:nrow(data)
+
+# 设置随机种子确保结果可重复
+set.seed(123)
+
+# 创建五折交叉验证的分区
+folds <- createFolds(data$conc, k = 5, list = TRUE)
+
+# 初始化结果列表
+lda_models <- list()
+predictions <- list()
+plots <- list()
+
+# 执行五折交叉验证
+for (i in 1:5) {
+  # 划分训练集和测试集
+  test_indices <- folds[[i]]
+  train_data <- data[-test_indices, ]
+  test_data <- data[test_indices, ]
+  
+  # 构建LDA模型
+  lda_model <- lda(conc ~ blue + green + red, data = train_data)
+  
+  # 保存模型
+  lda_models[[i]] <- lda_model
+  
+  # 对测试集进行预测
+  pred <- predict(lda_model, newdata = test_data)
+  predictions[[i]] <- data.frame(
+    row_id = test_data$row_id,
+    conc = test_data$conc,
+    pred = pred$class,
+    LD1 = pred$x[, 1],
+    LD2 = pred$x[, 2]
+  )
+  
+  # 使用ggord进行LDA可视化
+  p <- ggord(lda_model, grp_in = train_data$conc)
+  
+  # 添加方差解释率到坐标轴标签
+  svd_ratio <- lda_model$svd^2 / sum(lda_model$svd^2)
+  perc_var <- round(svd_ratio * 100, 1)
+  p <- p + 
+    labs(x = paste0("LD1 (", perc_var[1], "%)"),
+         y = paste0("LD2 (", perc_var[2], "%)"),
+         title = paste("Fold", i, "LDA分类结果")) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  # 保存图形
+  plots[[i]] <- p
+}
+
+# 输出所有折叠的LDA可视化结果
+for (i in 1:5) {
+  print(plots[[i]])
+}
+
+# 计算总体准确率
+all_predictions <- do.call(rbind, predictions)
+accuracy <- mean(all_predictions$conc == all_predictions$pred)
+cat("五折交叉验证总体准确率:", round(accuracy * 100, 2), "%\n")

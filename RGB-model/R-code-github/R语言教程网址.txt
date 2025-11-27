@@ -1,0 +1,9 @@
+https://geek-docs.com/r-language/r-tutorials/g_support-vector-machine-classifier-implementation-in-r-with-caret-package.html
+
+https://blog.csdn.net/water200101/article/details/125100539
+
+https://cloud.tencent.com/developer/article/1057968?policyId=1004
+
+https://www.plob.org/article/12766.html
+
+https://www.plob.org/article/12694.html

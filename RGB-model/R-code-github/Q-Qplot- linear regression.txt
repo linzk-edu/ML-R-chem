@@ -1,0 +1,63 @@
+# 确保 model_optimized 已定义（如 lm 模型对象）
+# model_optimized <- lm(...) 
+
+# 1. 基础绘图参数设置（解决中文、布局）
+par(
+  mfrow = c(1, 1),        # 单独展示 Q-Q 图，如需多图可调整
+  family = "SimSun",      # 解决 Windows 中文显示，Mac 可用 "PingFang SC"
+  mar = c(4, 4, 3, 2)     # 边距更紧凑，适配标题和轴标签
+)
+
+# 2. 提取残差、计算理论分位数
+resid <- model_optimized$residuals
+n <- length(resid)
+x <- qnorm(ppoints(n))     # 理论分位数（正态分布）
+y <- sort(resid)           # 排序后的样本残差
+
+# 3. 计算 95% 置信区间（更精准的统计方法）
+# 基于正态分布的置信区间公式
+sd_resid <- sd(resid)
+se <- sd_resid * sqrt(1/n + x^2/(2*(n-1)))  # 标准误公式优化
+ci_upper <- y + qnorm(0.975) * se
+ci_lower <- y - qnorm(0.975) * se
+
+# 4. 绘制 Q-Q 图（分步优化图层）
+# 先画置信区间阴影，再画散点、参考线，避免覆盖
+plot(
+  x, y, 
+  main = "Q-Q 图（含 95% 置信区间）", 
+  xlab = "理论分位数（正态分布）", 
+  ylab = "样本分位数（残差）",
+  pch = 16, col = "#4B89DC",  # 散点样式：实心圆 + 深蓝色
+  cex = 0.8,                  # 散点大小适中
+  xlim = range(x) * 1.1,      # 预留横轴空白，避免点贴边
+  ylim = range(y) * 1.1       # 预留纵轴空白
+)
+
+# 绘制置信区间阴影（用多边形填充）
+polygon(
+  x = c(x, rev(x)), 
+  y = c(ci_upper, rev(ci_lower)), 
+  col = adjustcolor("#90CAF9", alpha.f = 0.3),  # 浅蓝色半透明
+  border = NA  # 不显示多边形边框
+)
+
+# 绘制参考线（红色更清晰）
+qqline(
+  resid, 
+  col = "#E53935",  # 红色参考线
+  lwd = 2,          # 线条加粗
+  lty = 1           # 实线
+)
+
+# 5. 补充统计检验结果标注（可选）
+shapiro_res <- shapiro.test(resid)
+legend(
+  "topleft", 
+  legend = c(
+    sprintf("Shapiro-Wilk W = %.4f", shapiro_res$statistic),
+    sprintf("p-value = %.4f", shapiro_res$p.value)
+  ),
+  bty = "n",  # 无边框
+  cex = 0.9   # 字体大小
+)

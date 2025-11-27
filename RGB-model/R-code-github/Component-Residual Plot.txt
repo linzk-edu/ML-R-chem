@@ -1,0 +1,18 @@
+# 绘制R、G、B的Component-Residual Plot
+# 确保图形布局合理
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))  # 设置为1行3列布局，调整边距
+
+# 绘制blue变量的CR Plot
+crPlot(model_optimized, var = "red")
+title(main = "Component + Residual Plots", line = 1)  # 添加标题
+
+# 绘制green变量的CR Plot
+crPlot(model_full, var = "green")
+title(main = "Green变量的成分残差图", line = 1)  # 添加标题
+
+# 绘制red变量的CR Plot
+crPlot(model_full, var = "red")
+title(main = "Blue变量的成分残差图", line = 1)  # 添加标题
+
+# 重置图形参数
+par(mfrow = c(1, 1))

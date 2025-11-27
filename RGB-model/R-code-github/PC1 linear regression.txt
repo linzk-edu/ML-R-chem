@@ -1,0 +1,81 @@
+
+# 加载必要的包 -------------------------------------------------------------
+library(ggplot2)    # 数据可视化
+library(dplyr)       # 数据操作
+library(caret)       # 数据划分与预处理
+library(broom)       # 模型结果整理
+library(lattice)
+# 步骤1: 读取数据（实际数据路径）-------------------------------------
+library(readxl)
+data <- read_excel("C:/Users/ZhuanZ/Desktop/s18.xlsx") 
+
+# 步骤2: 划分训练集和测试集（3:1比例）-------------------------------------
+train_indices <- createDataPartition(data$Conc., p = 0.75, list = FALSE)
+train_data <- data[train_indices, ]
+test_data <- data[-train_indices, ]
+
+# 3.2 训练集PCA（提取主成分）
+pca_model <- prcomp(train_data[, c("Blue", "Green", "Red")], center = FALSE, scale. = FALSE)
+train_data$PC1 <- pca_model$x[, 1]  # 提取第一主成分
+
+# 步骤4: 构建回归模型（训练集PC1与浓度）-----------------------------------
+lm_model <- lm(Conc. ~ PC1, data = train_data)
+train_data$Predicted <- predict(lm_model)
+
+# 步骤5: 测试集处理（使用训练集参数投影）-----------------------------------
+
+
+# 5.2 投影到训练集的PCA空间
+test_pca <- predict(pca_model, newdata = test_data[, c("Blue", "Green", "Red")])
+test_data$PC1 <- test_pca[, 1]  # 测试集PC1得分
+
+# 5.3 预测测试集浓度
+test_data$Predicted <- predict(lm_model, newdata = test_data)
+
+# 步骤6: 模型性能评估 -----------------------------------------------------
+# 6.1 训练集指标
+train_metrics <- glance(lm_model) %>%
+  mutate(Set = "Train", R2 = round(r.squared, 3), RMSE = round(sigma, 3))
+
+# 6.2 测试集指标
+test_r2 <- cor(test_data$Conc., test_data$Predicted)^2
+test_rmse <- sqrt(mean((test_data$Conc. - test_data$Predicted)^2))
+test_mae <- mean(abs(test_data$Conc. - test_data$Predicted))
+
+# 步骤7: 可视化结果 -------------------------------------------------------
+ggplot() +
+  # 训练集散点（黑色方块）
+  geom_point(
+    data = train_data,
+    aes(x = PC1, y = Conc.),
+    color = "black", shape = 15, size = 3, alpha = 0.6
+  ) +
+  # 测试集散点（蓝色圆点）
+  geom_point(
+    data = test_data,
+    aes(x = PC1, y = Conc.),
+    color = "#2E86C1", shape = 16, size = 3, alpha = 0.9
+  ) +
+  # 回归线（红色实线）
+  geom_smooth(
+    data = train_data,
+    aes(x = PC1, y = Predicted),
+    method = "lm", color = "#E74C3C", se = FALSE, linewidth = 1.5
+  ) +
+  # 模型方程标注
+  annotate(
+    "text", x = min(train_data$PC1), y = max(train_data$Conc.),
+    label = sprintf("[ClO⁻] = %.2f + %.2f*PC1\n train R² = %.3f\n test R² = %.3f",
+                   coef(lm_model)[1], coef(lm_model)[2], train_metrics$R2, test_r2),
+    hjust = 0, vjust = 1, color = "black", size = 4
+  ) +
+  # 坐标轴与主题
+  labs(x = "PC1", y = " [ClO⁻] (μM)", title = "Regression Analysis") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# 输出性能指标
+cat("测试集性能:\n",
+    "R² =", round(test_r2, 3), "\n",
+    "RMSE =", round(test_rmse, 3), "\n",
+    "MAE =", round(test_mae, 3))

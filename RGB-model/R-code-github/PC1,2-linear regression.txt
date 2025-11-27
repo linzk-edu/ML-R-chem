@@ -1,0 +1,43 @@
+# 安装并加载包
+library(openxlsx)
+library(caret)
+library(ggplot2)
+library(car)
+library(readxl)
+
+data <- read_excel("C:/Users/ZhuanZ/Desktop/21.xlsx", sheet = 1) 
+# 读取数据
+
+colnames(data) <- c("PC1", "conc")
+
+# 数据分割
+set.seed(123)
+split_idx <- createDataPartition(data$conc, p = 0.75, list = FALSE)
+train_data <- data[split_idx, ]
+test_data <- data[-split_idx, ]
+
+# 初始模型（含green）
+model_full <- lm(conc ~ PC1 , data = train_data)
+cat("初始模型摘要：\n"); summary(model_full)
+
+
+# 残差正态性检验
+par(mfrow = c(1, 2))
+qqnorm(model_full$residuals, main = "Q-Q图")
+qqline(model_full$residuals, col = "red")
+shapiro.test(model_full$residuals)
+
+# 拟合曲线可视化
+train_pred <- predict(model_full, train_data)
+test_pred <- predict(model_full, test_data)
+results <- rbind(
+  data.frame(Observed = train_data$conc, Predicted = train_pred, Set = "训练集"),
+  data.frame(Observed = test_data$conc, Predicted = test_pred, Set = "测试集")
+)
+
+ggplot(results, aes(Observed, Predicted, color = Set)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "多元线性回归拟合结果", x = "真实浓度 (μM)", y = "预测浓度 (μM)") +
+  theme_bw()

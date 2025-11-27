@@ -1,0 +1,92 @@
+# 加载必要的包
+library(MASS)       # LDA模型
+library(readxl)     # 读取Excel
+library(caret)      # 交叉验证
+library(ggplot2)    # 可视化
+library(dplyr)      # 数据处理
+library(ggord)      # LDA可视化
+library(gridExtra)  # 图形排列
+
+# 1. 数据读取与预处理
+data <- readxl::read_excel("C:/Users/ZhuanZ/Desktop/1.xlsx")
+data$conc <- as.factor(data$conc)  # 分类变量转换
+data$row_id <- 1:nrow(data)        # 唯一标识
+
+# 2. 交叉验证设置
+set.seed(123)                       # 固定随机种子
+folds <- createFolds(data$conc, k=5)# 五折分层抽样
+
+# 3. 初始化存储对象
+lda_models <- list()                # 保存每折LDA模型
+test_predictions <- list()          # 保存每折测试集预测结果
+train_fold_acc <- list()            # 保存每折训练集准确率
+test_fold_acc <- list()             # 保存每折测试集准确率
+plots <- list()                     # 保存每折LDA可视化图
+
+# 4. 五折交叉验证循环
+for (i in 1:5) {
+  # 4.1 划分数据集
+  test_idx <- folds[[i]]
+  train_data <- data[-test_idx, ]   # 训练集（48条，6类×8条/类）
+  test_data <- data[test_idx, ]     # 测试集（12条，6类×2条/类）
+  
+  # 4.2 训练LDA模型
+  lda_model <- lda(conc ~ blue + green + red, data = train_data)
+  lda_models[[i]] <- lda_model      # 保存模型
+  
+  # 4.3 预测训练集（计算训练集准确率）
+  pred_train <- predict(lda_model, newdata = train_data)
+  train_acc <- mean(train_data$conc == pred_train$class)  # 训练集准确率
+  train_fold_acc[[i]] <- train_acc                         # 保存结果
+  
+  # 4.4 预测测试集（计算测试集准确率）
+  pred_test <- predict(lda_model, newdata = test_data)
+  test_acc <- mean(test_data$conc == pred_test$class)      # 测试集准确率
+  test_fold_acc[[i]] <- test_acc                           # 保存结果
+  test_predictions[[i]] <- data.frame(                     # 保存测试集预测结果
+    row_id = test_data$row_id,
+    conc = test_data$conc,
+    pred = pred_test$class,
+    LD1 = pred_test$x[,1],
+    LD2 = pred_test$x[,2]
+  )
+  
+  # 4.5 LDA可视化（训练集）
+  p <- ggord(lda_model, grp_in = train_data$conc)
+  svd_ratio <- lda_model$svd^2 / sum(lda_model$svd^2)
+  perc_var <- round(svd_ratio * 100, 1)
+  p <- p + labs(
+    x = paste0("LD1 (", perc_var[1], "%)"),
+    y = paste0("LD2 (", perc_var[2], "%)"),
+    title = paste("Fold", i, "LDA结果")
+  ) + theme_minimal() + 
+    theme(plot.title = element_text(hjust=0.5, face="bold"))
+  plots[[i]] <- p  # 保存可视化图
+  
+  # 4.6 打印当前折的准确率
+  cat("==== Fold", i, "====\n")
+  cat("  训练集准确率: ", round(train_acc*100, 2), "%\n")
+  cat("  测试集准确率: ", round(test_acc*100, 2), "%\n\n")
+}
+
+# 5. 汇总每折准确率（训练集+测试集）
+## 5.1 训练集汇总
+cat("\n==== 训练集五折准确率汇总 ====\n")
+for (i in 1:5) {
+  cat("Fold", i, ":", round(train_fold_acc[[i]]*100, 2), "%\n")
+}
+mean_train <- mean(unlist(train_fold_acc))
+sd_train <- sd(unlist(train_fold_acc))
+cat("平均准确率: ", round(mean_train*100, 2), "% ± ", 
+    round(sd_train*100, 2), "%\n\n")
+
+## 5.2 测试集汇总
+cat("==== 测试集五折准确率汇总 ====\n")
+for (i in 1:5) {
+  cat("Fold", i, ":", round(test_fold_acc[[i]]*100, 2), "%\n")
+}
+mean_test <- mean(unlist(test_fold_acc))
+sd_test <- sd(unlist(test_fold_acc))
+cat("平均准确率: ", round(mean_test*100, 2), "% ± ", 
+    round(sd_test*100, 2), "%\n\n")
+

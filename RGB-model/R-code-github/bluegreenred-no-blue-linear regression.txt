@@ -1,0 +1,74 @@
+# 安装并加载包
+library(openxlsx)
+library(caret)
+library(ggplot2)
+library(car)
+library(readxl)
+
+data <- read_excel("C:/Users/ZhuanZ/Desktop/1.xlsx", sheet = 1) 
+# 读取数据
+
+colnames(data) <- c("conc", "blue", "green", "red")
+
+# 数据分割
+set.seed(123)
+split_idx <- createDataPartition(data$conc, p = 0.75, list = FALSE)
+train_data <- data[split_idx, ]
+test_data <- data[-split_idx, ]
+
+# 初始模型（含blue）
+model_full <- lm(conc ~ blue + green + red, data = train_data)
+cat("初始模型摘要：\n"); summary(model_full)
+
+# 优化模型（删除blue）
+model_optimized <- lm(conc ~ red, data = train_data)
+cat("\n优化后模型摘要：\n"); summary(model_optimized)
+
+# 残差正态性检验
+par(mfrow = c(1, 2))
+qqnorm(model_optimized$residuals, main = "Q-Q图")
+qqline(model_optimized$residuals, col = "red")
+shapiro.test(model_optimized$residuals)
+
+# 拟合曲线可视化
+train_pred <- predict(model_optimized, train_data)
+test_pred <- predict(model_optimized, test_data)
+results <- rbind(
+  data.frame(Observed = train_data$conc, Predicted = train_pred, Set = "训练集"),
+  data.frame(Observed = test_data$conc, Predicted = test_pred, Set = "测试集")
+)
+
+ggplot(results, aes(Observed, Predicted, color = Set)) +
+  geom_point() +
+  geom_abline(slope = 1, linetype = "dashed") +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "多元线性回归拟合结果", x = "真实浓度 (μM)", y = "预测浓度 (μM)") +
+  theme_bw()
+
+
+
+# 线性方程提取优化模型的系数
+coef_intercept <- coef(model_optimized)[1]  # 截距项
+coef_red <- coef(model_optimized)[2]        # Red变量的系数
+
+# 格式化系数为两位小数（根据需要调整）
+coef_intercept_rounded <- round(coef_intercept, 4)
+coef_red_rounded <- round(coef_red, 4)
+
+# 构建并打印线性方程
+equation <- paste0(
+  "conc = ", 
+  coef_intercept_rounded, 
+  " + ", 
+  coef_red_rounded, 
+  " × Red"
+)
+
+cat("最终线性回归方程:\n", equation, "\n\n")
+
+# 同时输出R²和调整R²，展示模型拟合优度
+r_squared <- summary(model_optimized)$r.squared
+adj_r_squared <- summary(model_optimized)$adj.r.squared
+cat("模型拟合优度:\n")
+cat("R² =", round(r_squared, 4), "\n")
+cat("调整R² =", round(adj_r_squared, 4), "\n")

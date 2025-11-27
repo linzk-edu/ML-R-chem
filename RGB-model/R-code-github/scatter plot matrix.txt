@@ -1,0 +1,10 @@
+ library(readxl)
+ data <- read_excel("C:/Users/ZhuanZ/Desktop/NDI-RGB-Standard.xlsx") 
+ library(car)
+ scatterplotMatrix( ~ blue + green + red + conc., data = data,
+                    spread = FALSE, smoother.args = list(lty=2),
+                    main='Scatter Plot Matrix')
+
+
+C:/Users/ZhuanZ/Desktop/14.xlsx 输入文件路径
+替换~ PC1 + PC2 + PC3 + conc., data = data，

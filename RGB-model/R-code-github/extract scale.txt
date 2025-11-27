@@ -1,0 +1,10 @@
+library(readxl)
+data <- read_excel("C:/Users/ZhuanZ/Desktop/18.xlsx") 
+# 变量有很大的方差及均值时需进行标准化
+df = scale(data)
+# 获取桌面路径（自动适配系统）
+desktop_path <- file.path(Sys.getenv("USERPROFILE"), "Desktop")  
+# 构建完整文件路径
+file_path <- file.path(desktop_path, "s20.csv")  
+# 导出数据（不包含行号）
+write.csv(df, file = file_path, row.names = FALSE)  

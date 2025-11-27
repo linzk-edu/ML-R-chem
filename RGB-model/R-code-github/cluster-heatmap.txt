@@ -1,0 +1,20 @@
+# 加载必要包（确保已安装 factoextra 和 ggplot2）
+library(factoextra)
+library(ggplot2)
+
+# 读取数据：第一列设为行名
+data <- read.csv("C:/Users/ZhuanZ/Desktop/rgb-scale.csv", row.names = 1)
+
+# 计算聚类趋势（n 为随机采样数，建议为样本量的 10%-20%）
+res <- get_clust_tendency(data, n = 40, graph = TRUE)
+
+# 优化绘图：显示横纵轴标签，调整角度避免重叠
+adjusted_plot <- res$plot + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 8),  # X轴标签旋转45度，调整对齐
+    axis.text.y = element_text(size = 8)  # 显示Y轴标签，设置字体大小
+  )
+
+# 输出结果
+print(adjusted_plot)  # 显示带标签的图
+cat("Hopkins 统计量：", res$hopkins_stat, "\n")  # 输出统计量

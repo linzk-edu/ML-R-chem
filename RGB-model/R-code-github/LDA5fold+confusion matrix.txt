@@ -1,0 +1,206 @@
+# 加载必要的包
+library(MASS)       # 用于LDA模型
+library(readxl)     # 读取Excel文件
+library(caret)      # 用于交叉验证
+library(ggplot2)    # 可视化
+library(dplyr)      # 数据处理
+library(ggord)      # 用于LDA可视化
+library(gridExtra)  # 图形排列
+
+# 读取数据
+data <- readxl::read_excel("C:/Users/ZhuanZ/Desktop/1.xlsx")
+
+# 数据预处理
+data$conc <- as.factor(data$conc)  # 将conc列转换为因子类型（分类变量）
+
+# 为每行添加唯一标识符（用于后续匹配）
+data$row_id <- 1:nrow(data)
+
+# 设置随机种子确保结果可重复
+set.seed(123)
+
+# 创建五折交叉验证的分区
+folds <- createFolds(data$conc, k = 5, list = TRUE)
+
+# 初始化结果列表
+lda_models <- list()
+predictions <- list()
+plots <- list()
+
+# 执行五折交叉验证
+for (i in 1:5) {
+  # 划分训练集和测试集
+  test_indices <- folds[[i]]
+  train_data <- data[-test_indices, ]
+  test_data <- data[test_indices, ]
+  
+  # 打印每个折叠的样本数量
+  cat("Fold", i, ":\n")
+  cat("  训练集大小:", nrow(train_data), "\n")
+  cat("  测试集大小:", nrow(test_data), "\n")
+  
+  # 构建LDA模型
+  lda_model <- lda(conc ~ blue + green + red, data = train_data)
+  
+  # 保存模型
+  lda_models[[i]] <- lda_model
+  
+  # 对测试集进行预测
+  pred <- predict(lda_model, newdata = test_data)
+  predictions[[i]] <- data.frame(
+    row_id = test_data$row_id,
+    conc = test_data$conc,
+    pred = pred$class,
+    LD1 = pred$x[, 1],
+    LD2 = pred$x[, 2]
+  )
+  
+  # 打印预测结果的样本数量
+  cat("  预测结果大小:", nrow(predictions[[i]]), "\n")
+  
+  # 验证预测结果列的长度是否一致
+  if(nrow(predictions[[i]]) != length(predictions[[i]]$conc) || 
+     nrow(predictions[[i]]) != length(predictions[[i]]$pred)) {
+    cat("  警告: 预测结果列长度不一致!\n")
+    cat("    conc长度:", length(predictions[[i]]$conc), "\n")
+    cat("    pred长度:", length(predictions[[i]]$pred), "\n")
+  }
+  
+  # 使用ggord进行LDA可视化
+  p <- ggord(lda_model, grp_in = train_data$conc)
+  
+  # 添加方差解释率到坐标轴标签
+  svd_ratio <- lda_model$svd^2 / sum(lda_model$svd^2)
+  perc_var <- round(svd_ratio * 100, 1)
+  p <- p + 
+    labs(x = paste0("LD1 (", perc_var[1], "%)"),
+         y = paste0("LD2 (", perc_var[2], "%)"),
+         title = paste("Fold", i, "LDA分类结果")) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  # 保存图形
+  plots[[i]] <- p
+}
+
+# 输出所有折叠的LDA可视化结果
+for (i in 1:5) {
+  print(plots[[i]])
+}
+
+# 修复后的混淆矩阵函数
+create_confusion_plot <- function(df, title) {
+  # 验证输入数据
+  cat("混淆矩阵输入数据大小:", nrow(df), "\n")
+  
+  # 检查必要的列是否存在
+  required_cols <- c("conc", "pred")
+  if(!all(required_cols %in% colnames(df))) {
+    missing_cols <- required_cols[!required_cols %in% colnames(df)]
+    stop(paste("错误: 输入数据缺少必要的列:", paste(missing_cols, collapse = ", ")))
+  }
+  
+  # 验证列长度
+  if(length(df$conc) != length(df$pred)) {
+    stop(paste("错误: conc列长度(", length(df$conc), 
+               ")与pred列长度(", length(df$pred), ")不一致"))
+  }
+  
+  # 创建混淆矩阵
+  cm <- table(actual = df$conc, predicted = df$pred)
+  cat("混淆矩阵样本总数:", sum(cm), "\n")
+  
+  # 计算类准确率
+  class_acc <- diag(cm) / rowSums(cm)
+  acc_df <- data.frame(
+    actual = rownames(cm),  # 使用混淆矩阵的行名作为类别
+    accuracy = paste0(round(class_acc * 100, 1), "%")
+  )
+  
+  # 将混淆矩阵转换为数据框以便绘图
+  cm_df <- as.data.frame(cm)
+  names(cm_df) <- c("actual", "predicted", "freq")
+  
+  # 计算文本颜色
+  cm_df$text_color <- ifelse(cm_df$freq > max(cm_df$freq)/2, "white", "black")
+  
+  # 获取类别数量用于标签定位
+  n_categories <- length(unique(cm_df$predicted))
+  n_actual <- length(unique(cm_df$actual))
+  
+  # 创建混淆矩阵图
+  p <- ggplot(cm_df, aes(x = predicted, y = actual)) +
+    geom_tile(aes(fill = freq), color = "white", linewidth = 0.4) +
+    geom_text(aes(label = freq, color = text_color), 
+              size = 4, fontface = "bold", show.legend = FALSE) +
+    scale_fill_gradientn(
+      colors = colorRampPalette(c("#F0F8FF", "#4682B4"))(10),
+      name = "样本数量"
+    ) +
+    scale_color_identity() +
+    labs(
+      title = title,
+      subtitle = paste("总体准确率:", round(sum(diag(cm))/sum(cm)*100, 1), "%"),
+      x = "预测类别",
+      y = "实际类别"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 12, color = "darkblue"),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+      panel.grid = element_blank(),
+      legend.position = "bottom"
+    )
+  
+  # 如果有类准确率数据，添加到图中
+  if(nrow(acc_df) > 0) {
+    p <- p + 
+      geom_text(
+        data = acc_df,
+        aes(x = n_categories + 0.7, y = actual, label = accuracy),
+        inherit.aes = FALSE,
+        hjust = 0, size = 3.5, color = "red3"
+      ) +
+      coord_cartesian(
+        clip = "off", 
+        xlim = c(0.5, n_categories + 1),  # 扩展x轴范围以容纳准确率标签
+        ylim = c(0.5, n_actual + 0.5)
+      )
+  }
+  
+  return(p)
+}
+
+# 合并所有测试集预测结果
+combined_test <- do.call(rbind, predictions)
+cat("合并后的测试集预测结果大小:", nrow(combined_test), "\n")
+
+# 创建训练集预测结果（需要重新预测，因为之前只保存了测试集预测）
+train_predictions <- list()
+for (i in 1:5) {
+  test_indices <- folds[[i]]
+  train_data <- data[-test_indices, ]
+  
+  # 使用当前折叠的模型对训练数据进行预测
+  pred_train <- predict(lda_models[[i]], newdata = train_data)
+  train_predictions[[i]] <- data.frame(
+    row_id = train_data$row_id,
+    conc = train_data$conc,
+    pred = pred_train$class,
+    LD1 = pred_train$x[, 1],
+    LD2 = pred_train$x[, 2]
+  )
+}
+
+# 合并所有训练集预测结果
+combined_train <- do.call(rbind, train_predictions)
+cat("合并后的训练集预测结果大小:", nrow(combined_train), "\n")
+
+# 生成可视化图形
+p_train <- create_confusion_plot(combined_train, "五折交叉验证 - 训练集汇总混淆矩阵")
+p_test <- create_confusion_plot(combined_test, "五折交叉验证 - 测试集汇总混淆矩阵")
+
+# 输出图形
+print(p_train)
+print(p_test)

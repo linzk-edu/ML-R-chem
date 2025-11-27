@@ -1,0 +1,29 @@
+# 步骤1：加载包
+library(factoextra)
+library(dplyr)
+
+# 步骤3：修改后的聚类代码
+your_hc <- data %>% 
+  dist(method = "euclidean") %>% # 距离计算
+  hclust(method = "ward.D2")     # 聚类算法
+
+# 步骤4：绘制树状图（分3类）
+fviz_dend(
+  your_hc, 
+  k = 3,   # 修改聚类数量
+  cex = 0.7, 
+  k_colors = c("#2E9FDF", "#E7B800", "#FC4E07"), # 颜色匹配k值
+  rect = TRUE,
+  rect_fill = paste0(c("#2E9FDF", "#E7B800", "#FC4E07"), "30"), # 半透明填充
+  main = "Your Data Clustering"  # 添加标题
+)
+
+library(factoextra)
+library(NbClust)
+# 自动评估最佳k值（范围2-10）
+nb <- NbClust(df, method = "average", index = "silhouette", min.nc=2, max.nc=10)
+best_k <- nb$Best.nc[1]  # 提取最佳k值
+
+# 应用最佳k值
+res.hc <- eclust(df, "hclust", k = 6, graph = FALSE)
+fviz_dend(res.hc, k = 6, rect = TRUE)
